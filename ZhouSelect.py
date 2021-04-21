@@ -72,13 +72,18 @@ def query(org):
     query_response = requests.get(url=query_url,headers=query_headers)
 
     html = etree.HTML(query_response.text)
-    # html.xpath("//em[text()='中国人寿保险股份有限公司']/../../..")[0]
     try:
-        # 主题搜索窗口
+        # 所有搜索列表
         resule_list_div=html.xpath("//div[@class='result-list sv-search-container']")[0]
-        # 定位正确的搜索结果
+        # 一般第一个就是正确的，取搜索列表中的第一个
         content_div=resule_list_div.xpath("./div/div/div[@class='content']/div/a/em[text()='"+org+"']/../../..")[0]
         print('***************************************')
+        try:
+            org_name=content_div.xpath('./../div[@class="triangle-xcx"]/div[@class="xcx-block"]/div[@class="info"]')[0].text
+            # org_name=resule_list_div.xpath('./div/div[@class="search-result-single  "]/div[@class="triangle-xcx"]/div[@class="xcx-block"]/div[@class="info"]')[0].text
+            print('公司名->',org_name)
+        except Exception as e:
+            print('没有定位到公司名',e)
         try:
             user=content_div.xpath('./div[@class="info row text-ellipsis"]/div[1]/a')[0].text
             print('法人/经营者->',user)
@@ -108,7 +113,7 @@ if __name__ == "__main__":
 
     while True:
         try:
-            query(input('请输入一个机构'))
+            query(input('请输入一个机构：'))
         except Exception as e:
             print(e)
             continue
