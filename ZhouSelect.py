@@ -15,7 +15,33 @@ config = {}
 # excel生成模板
 template = ['客户名称', '经营状态', '工商注册地址', '法人姓名', '工商联系方式', '查询到的机构']
 
+# 请求头
+query_headers = {}
+
+# 初始化请求头
+def init_cookie(Cookie):
+    global query_headers
+    query_headers = {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Connection': 'keep-alive',
+        'Host': 'www.tianyancha.com',
+        'Referer': 'https://www.tianyancha.com/',
+        'sec-ch-ua': '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"',
+        'sec-ch-ua-mobile': '?0',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'same-origin',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+        'Cookie': Cookie,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.72 Safari/537.36'
+    }
+
+# 初始化excel模板
 def init_excel_template():
+    print('>正在生成模板...')
     try:
         work_book=Workbook()
         work_sheet = work_book.active
@@ -27,6 +53,8 @@ def init_excel_template():
     finally:
         work_book.save('template.xlsx')
         work_book.close()
+        input('>模板生成完成,回车结束程序')
+
 
 
 # 生成配置文件
@@ -65,7 +93,7 @@ def read_config():
         input('生成结束,请重新打开程序,回车后退出程序！')
         sys.exit()
 
-
+# 主查询方法
 def query(org):
     result={
         'query_org_name': org,
@@ -76,27 +104,7 @@ def query(org):
         'query_org_result_name': '未查询到'
     }
     query_url = "https://www.tianyancha.com/search?key="+org
-    # 获取分公司headers
-    query_headers = {
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Accept-Language': 'zh-CN,zh;q=0.9',
-        'Connection': 'keep-alive',
-        'Host': 'www.tianyancha.com',
-        'Referer': 'https://www.tianyancha.com/',
-        'sec-ch-ua': '" Not A;Brand";v="99", "Chromium";v="90", "Google Chrome";v="90"',
-        'sec-ch-ua-mobile': '?0',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'same-origin',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        'Cookie': Cookie,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.72 Safari/537.36'
-    }
-
     query_response = requests.get(url=query_url,headers=query_headers)
-
     html = etree.HTML(query_response.text)
     try:
         # check_login()
@@ -141,6 +149,52 @@ def query(org):
         print('没有查询到该公司：'+org,e)
     return result
 
+# excel 录入方法
+def do_excel():
+    read_config()
+    print('>开始加载excel...')
+    work_book = openpyxl.load_workbook(config['excel'])
+    print('>开始加载表单...')
+    work_sheet = work_book[config['work_sheet']]
+    print('>开始读取总条数...')
+    work_len = work_sheet.max_row
+    print('>开始读取进度...')
+    progress = config['last_line']
+    print('>工作表单加载完成->', config['work_sheet'])
+    print('>工作excel加载完成->', config['excel'])
+    print('> size ->', str(work_len))
+    print('>上一次执行到->', progress)
+    print('现在开始执行自动录入,请不要关闭程序,请手动备份文件...')
+    try:
+        for index, row in enumerate(work_sheet.rows):
+            if index < int(config['last_line']):
+                print('已略过！index：', index)
+                continue
+            print('当前下标', index)
+            instrt = query(str(work_sheet.cell(index + 1, column=1).value))
+            work_sheet.cell(row=index + 1, column=2, value=instrt['status'])
+            work_sheet.cell(row=index + 1, column=3, value=instrt['address'])
+            work_sheet.cell(row=index + 1, column=4, value=instrt['user'])
+            work_sheet.cell(row=index + 1, column=5, value=instrt['phone'])
+            work_sheet.cell(row=index + 1, column=6, value=instrt['query_org_result_name'])
+            config['last_line'] = str(index)
+            savefile()
+            work_book.save(config['excel'])
+            if index % 100 == 0:
+                work_book.save('自动备份_' + str(index) + '.xlsx')
+            sleep_time = random.randint(1, 5)
+            print('>反反爬睡眠：' + str(sleep_time) + '秒')
+            sleep(sleep_time)
+    except Exception as e:
+        print('程序发生了意想不到的错误！', e)
+    finally:
+        savefile()
+        work_book.save(config['excel'])
+        work_book.close()
+    input('end...')
+
+
+
 print('***************************************')
 print('**********欢迎来到老周查询器2.0***********')
 print('***************************************')
@@ -150,14 +204,10 @@ print('**************1.单查询*****************')
 print('**************2.Excel录入**************')
 print('**************3.生成Excel模板***********')
 print('***************************************')
+print('>当前的操作路径为', os.path.abspath('.'))
 
 select=input()
-print('>当前的操作路径为', os.path.abspath('.'))
-if select=='3':
-    print('>正在生成模板...')
-    init_excel_template()
-    input('>模板生成完成,回车结束程序')
-    sys.exit()
+
 if select=='2':
     read_config()
 # 驱动路径
@@ -166,13 +216,16 @@ bro = webdriver.Chrome(executable_path=os.path.abspath('.') + '\\' + "chromedriv
 bro.get("https://www.tianyancha.com/")
 #
 input('请在页面登录你的天眼查账号，登录完成后回到cmd窗口回车')
-
 Cookie=''
 # 设置cookie
+print('>开始读取Cookie...')
 for cookie in bro.get_cookies():
+    print(cookie['name']+'='+cookie['value']+';')
     Cookie=Cookie+cookie['name']+'='+cookie['value']+';'
 Cookie=Cookie[0:-1]
-print(Cookie)
+init_cookie(Cookie)
+
+# 入口
 if __name__ == "__main__":
 
     if select=='1':
@@ -182,47 +235,8 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e)
                 continue
-    if select =='2':
-        print('>开始加载excel...')
-        work_book = openpyxl.load_workbook(config['excel'])
-        print('>开始加载表单...')
-        work_sheet = work_book[config['work_sheet']]
-        print('>开始读取总条数...')
-        work_len = work_sheet.max_row
-        print('>开始读取进度...')
-        progress=config['last_line']
-        print('>工作表单加载完成->',config['work_sheet'])
-        print('>工作excel加载完成->',config['excel'])
-        print('> size ->',str(work_len))
-        print('>上一次执行到->',progress)
-        print('现在开始执行自动录入,请不要关闭程序,请手动备份文件...')
-        try:
-            for index, row in enumerate(work_sheet.rows):
-                if index < int(config['last_line']):
-                    print('已略过！index：', index)
-                    continue
-                print('当前下标',index)
-                instrt=query(str(work_sheet.cell(index+1,column=1).value))
-                work_sheet.cell(row=index+1, column=2, value=instrt['status'])
-                work_sheet.cell(row=index+1, column=3, value=instrt['address'])
-                work_sheet.cell(row=index+1, column=4, value=instrt['user'])
-                work_sheet.cell(row=index+1, column=5, value=instrt['phone'])
-                work_sheet.cell(row=index+1, column=6, value=instrt['query_org_result_name'])
-                config['last_line']=str(index)
-                savefile()
-                work_book.save(config['excel'])
-                if index%100==0:
-                    work_book.save('自动备份_'+str(index)+'.xlsx')
-                sleep_time=random.randint(1,5)
-                print('>反反爬睡眠：'+str(sleep_time)+'秒')
-                sleep(sleep_time)
-        except Exception as e:
-            print('程序发生了意想不到的错误！',e)
-        finally:
-            savefile()
-            work_book.save(config['excel'])
-            work_book.close()
-        input('end...')
+    if select =='2':do_excel()
+    if select == '3':init_excel_template()
 
 
 
